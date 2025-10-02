@@ -78,12 +78,15 @@ jobs:
           # Mail
           set_kv "MAIL_HOST" "${{ secrets.SECRET_MAIL_HOST }}"
           set_kv "MAIL_USERNAME" "${{ secrets.SECRET_MAIL_USERNAME }}"
-          set_kv "MAIL_PASSWORD" "\"${{ secrets.SECRET_MAIL_PASSWORD }}\""
+          #set_kv "MAIL_PASSWORD" "\"${{ secrets.SECRET_MAIL_PASSWORD }}\""
           set_kv "MAIL_FROM_ADDRESS" "${{ secrets.SECRET_MAIL_FROM }}"
           set_kv "REPORT_MAIL_TO" "${{ secrets.SECRET_MAIL_FROM }}"
 
           # Reporting
           set_kv "GSHEET_SPREADSHEET_ID" "${{ secrets.SECRET_SHEETS_SPREADSHEET_ID }}"
+
+          # helper 없이 바로 append 하는 경우
+          printf 'MAIL_PASSWORD="%s"\n' "${{ secrets.SECRET_MAIL_PASSWORD }}" >> .env
 
           # === ensure directory for service account & write file if provided ===
           mkdir -p storage/app/google
