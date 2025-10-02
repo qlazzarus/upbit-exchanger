@@ -93,7 +93,7 @@ GSHEET_SPREADSHEET_ID=...
 REPORT_MAIL_TO=you@example.com
 REPORT_SUBJECT_PREFIX="[Daily PnL]"
 REPORT_TIMEZONE=Asia/Seoul
-\```
+```
 
 > Google Sheets: 서비스 계정에 스프레드시트 공유 권한 필요. `config/reporting.php`에서 범위/시트 범위(A:Z) 설정.
 

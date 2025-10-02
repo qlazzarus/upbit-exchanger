@@ -1,0 +1,79 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ "main" ]  # main push 시 배포
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      # 현재 Runner IP 확인
+      - name: Get GitHub Actions runner IP
+        id: ip
+        run: echo "IP=$(curl -s https://checkip.amazonaws.com)" >> $GITHUB_ENV
+
+      # AWS CLI 설정
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # SG 인바운드 추가 (22번 포트, Runner IP만 허용)
+      - name: Authorize SSH in Security Group
+        run: |
+          aws ec2 authorize-security-group-ingress \
+            --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ env.IP }}/32
+
+      # .env 파일 생성 (base64 → decode)
+      - name: Generate .env file
+        run: |
+          echo "${{ secrets.APP_ENV_BASE64 }}" | base64 -d > .env
+          echo "${{ secrets.SECRET_GOOGLE_SA_JSON_BASE64 }}" | base64 -d > storage/app/google/service-account.json
+
+      # 압축 및 배포
+      - name: Zip project
+        run: zip -r release.zip . -x ".git*"
+
+      - name: Upload and deploy to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          source: "release.zip"
+          target: "~/app"
+
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd ~/app
+            unzip -o release.zip -d current
+            cd current
+            mv .env ../.env        # .env 상위에 위치시키기
+            composer install --no-dev --optimize-autoloader
+            php artisan migrate --force
+            sudo supervisorctl reread
+            sudo supervisorctl update
+            sudo supervisorctl restart all
+
+      # SG 인바운드 규칙 제거
+      - name: Revoke SSH from Security Group
+        if: always()
+        run: |
+          aws ec2 revoke-security-group-ingress \
+            --group-id ${{ secrets.EC2_SG_ID }} \
+            --protocol tcp --port 22 \
+            --cidr ${{ env.IP }}/32
