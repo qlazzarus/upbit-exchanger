@@ -142,11 +142,9 @@ jobs:
               mv "$APP_DIR/.env" "$CURRENT/.env"
             fi
 
-            echo "[deploy] ensure google SA path (if packed by CI)"
-            mkdir -p "$CURRENT/storage/app/google"
-
             echo "[deploy] composer optimize & migrate"
             cd "$CURRENT"
+            cp -f "$SHARED/database.sqlite" "$CURRENT/database/database.sqlite"
             php artisan migrate --force
             php artisan config:cache || true
             php artisan route:cache || true
