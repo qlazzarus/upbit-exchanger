@@ -33,11 +33,50 @@ jobs:
             --protocol tcp --port 22 \
             --cidr ${{ env.IP }}/32
 
-      # .env 파일 생성 (base64 → decode)
+      # .env 파일 생성 (example 복사 및 secrets overlay)
       - name: Generate .env file
         run: |
-          echo "${{ secrets.APP_ENV_BASE64 }}" | base64 -d > .env
-          echo "${{ secrets.SECRET_GOOGLE_SA_JSON_BASE64 }}" | base64 -d > storage/app/google/service-account.json
+          cp .env.example .env
+          # helper: set or append KEY=VALUE in .env
+          set_kv() {
+            local key="$1"
+            local val="$2"
+            if [ -z "$val" ]; then
+              return 0
+            fi
+            if grep -qE "^${key}=" .env; then
+              sed -i "s|^${key}=.*|${key}=${val}|" .env
+            else
+              echo "${key}=${val}" >> .env
+            fi
+          }
+
+          # === overlay secrets (only if present) ===
+          set_kv "APP_KEY" "${{ secrets.SECRET_APP_KEY }}"
+          set_kv "APP_ENV" "production"
+          set_kv "APP_DEBUG" "false"
+
+          # Upbit
+          set_kv "UPBIT_API_KEY" "${{ secrets.SECRET_UPBIT_ACCESS_KEY }}"
+          set_kv "UPBIT_API_SECRET" "${{ secrets.SECRET_UPBIT_SECRET_KEY }}"
+          set_kv "UPBIT_BASE_URL" "https://api.upbit.com"
+          set_kv "EXCHANGE_DEFAULT" "upbit"
+
+          # Mail
+          set_kv "MAIL_HOST" "${{ secrets.SECRET_MAIL_HOST }}"
+          set_kv "MAIL_USERNAME" "${{ secrets.SECRET_MAIL_USERNAME }}"
+          set_kv "MAIL_PASSWORD" "${{ secrets.SECRET_MAIL_PASSWORD }}"
+          set_kv "MAIL_FROM_ADDRESS" "${{ secrets.SECRET_MAIL_FROM }}"
+          set_kv "REPORT_MAIL_TO" "${{ secrets.SECRET_MAIL_FROM }}"
+
+          # Reporting
+          set_kv "GSHEET_SPREADSHEET_ID" "${{ secrets.SECRET_SHEETS_SPREADSHEET_ID }}"
+
+          # === ensure directory for service account & write file if provided ===
+          mkdir -p storage/app/google
+          if [ -n "${{ secrets.SECRET_GOOGLE_SA_JSON_BASE64 }}" ]; then
+            echo "${{ secrets.SECRET_GOOGLE_SA_JSON_BASE64 }}" | base64 -d > storage/app/google/service-account.json
+          fi
 
       # 압축 및 배포
       - name: Zip project
