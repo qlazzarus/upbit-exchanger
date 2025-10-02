@@ -12,6 +12,19 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
 
+      - name: Setup PHP (match server)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'          # 서버 PHP에 맞춰주세요
+          extensions: mbstring, intl, json, pdo_sqlite
+          tools: composer:v2
+          coverage: none
+
+      - name: Composer install (prod)
+        run: |
+          composer install --no-dev --optimize-autoloader --prefer-dist --no-interaction
+          composer check-platform-reqs
+
       # 현재 Runner IP 확인
       - name: Get GitHub Actions runner IP
         id: ip
@@ -65,7 +78,7 @@ jobs:
           # Mail
           set_kv "MAIL_HOST" "${{ secrets.SECRET_MAIL_HOST }}"
           set_kv "MAIL_USERNAME" "${{ secrets.SECRET_MAIL_USERNAME }}"
-          set_kv "MAIL_PASSWORD" "${{ secrets.SECRET_MAIL_PASSWORD }}"
+          set_kv "MAIL_PASSWORD" "\"${{ secrets.SECRET_MAIL_PASSWORD }}\""
           set_kv "MAIL_FROM_ADDRESS" "${{ secrets.SECRET_MAIL_FROM }}"
           set_kv "REPORT_MAIL_TO" "${{ secrets.SECRET_MAIL_FROM }}"
 
@@ -80,7 +93,7 @@ jobs:
 
       # 압축 및 배포
       - name: Zip project
-        run: zip -r release.zip . -x ".git*"
+        run: zip -r release.zip . -x ".git*" ".github/*" "tests/*"
 
       - name: Upload and deploy to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -102,23 +115,20 @@ jobs:
 
             APP_DIR="$HOME/app"
             CURRENT="$APP_DIR/current"
+            SHARED="$APP_DIR/shared"
             BACKUP_DIR="$APP_DIR/backups"
             TS="$(date +%Y%m%d%H%M%S)"
 
-            mkdir -p "$APP_DIR" "$BACKUP_DIR"
+            mkdir -p "$APP_DIR" "$BACKUP_DIR" "$SHARED" "$SHARED/storage/app/google"
 
-            cd "$APP_DIR"
-
-            echo "[deploy] backup sqlite (if exists)"
+            # 1) 기존 sqlite 백업 + shared 로 이동/보존
             if [ -f "$CURRENT/database/database.sqlite" ]; then
               cp "$CURRENT/database/database.sqlite" "$BACKUP_DIR/database.sqlite.$TS"
-              echo "  -> backed up from current/database/database.sqlite"
-            elif [ -f "$CURRENT/storage/database.sqlite" ]; then
-              cp "$CURRENT/storage/database.sqlite" "$BACKUP_DIR/database.sqlite.$TS"
-              echo "  -> backed up from current/storage/database.sqlite"
-            else
-              echo "  -> no sqlite file found (skip)"
+              # shared로 최신본 보관
+              cp "$CURRENT/database/database.sqlite" "$SHARED/database.sqlite"
             fi
+
+            cd "$APP_DIR"
 
             echo "[deploy] preserve existing .env (if exists)"
             if [ -f "$CURRENT/.env" ]; then
@@ -145,7 +155,6 @@ jobs:
 
             echo "[deploy] composer optimize & migrate"
             cd "$CURRENT"
-            composer install --no-dev --optimize-autoloader
             php artisan migrate --force
             php artisan config:cache || true
             php artisan route:cache || true
