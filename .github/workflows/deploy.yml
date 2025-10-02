@@ -153,31 +153,10 @@ jobs:
             php artisan view:cache || true
 
             # supervisor (if installed and running)
-            if command -v supervisorctl >/dev/null 2>&1; then
-              # 소켓 경로 강제 지정 (우리 conf 기준)
-              export SUPERVISOR_SERVER_URL=unix:///var/run/supervisor.sock
-
-              # 서비스가 죽어있으면 기동
-              if ! systemctl is-active --quiet supervisord; then
-                sudo systemctl start supervisord || true
-              fi
-
-              # 소켓 생길 때까지 최대 10초 대기
-              for i in {1..10}; do
-                [ -S /var/run/supervisor.sock ] && break
-                sleep 1
-              done
-
-              if [ -S /var/run/supervisor.sock ]; then
-                sudo supervisorctl reread || true
-                sudo supervisorctl update || true
-                sudo supervisorctl restart all || true
-              else
-                echo "[warn] supervisor.sock not found; skip supervisorctl steps"
-              fi
-            else
-              echo "[info] supervisorctl not found; skip"
-            fi
+            sudo systemctl restart supervisord || true
+            sudo supervisorctl reread || true
+            sudo supervisorctl update || true
+            sudo supervisorctl restart bot-watch || true
 
             echo "[deploy] done"
 
