@@ -2,7 +2,7 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main" ]  # main push 시 배포
+    branches: [ "master" ]  # master push 시 배포
 
 jobs:
   deploy:
