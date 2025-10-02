@@ -98,15 +98,87 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_KEY }}
           script: |
-            cd ~/app
-            unzip -o release.zip -d current
-            cd current
-            mv .env ../.env        # .env 상위에 위치시키기
+            set -euo pipefail
+
+            APP_DIR="$HOME/app"
+            CURRENT="$APP_DIR/current"
+            BACKUP_DIR="$APP_DIR/backups"
+            TS="$(date +%Y%m%d%H%M%S)"
+
+            mkdir -p "$APP_DIR" "$BACKUP_DIR"
+
+            cd "$APP_DIR"
+
+            echo "[deploy] backup sqlite (if exists)"
+            if [ -f "$CURRENT/database/database.sqlite" ]; then
+              cp "$CURRENT/database/database.sqlite" "$BACKUP_DIR/database.sqlite.$TS"
+              echo "  -> backed up from current/database/database.sqlite"
+            elif [ -f "$CURRENT/storage/database.sqlite" ]; then
+              cp "$CURRENT/storage/database.sqlite" "$BACKUP_DIR/database.sqlite.$TS"
+              echo "  -> backed up from current/storage/database.sqlite"
+            else
+              echo "  -> no sqlite file found (skip)"
+            fi
+
+            echo "[deploy] preserve existing .env (if exists)"
+            if [ -f "$CURRENT/.env" ]; then
+              cp "$CURRENT/.env" "$BACKUP_DIR/.env.$TS"
+              mv "$CURRENT/.env" "$APP_DIR/.env"
+            elif [ -f "$APP_DIR/.env" ]; then
+              echo "  -> using already placed $APP_DIR/.env"
+            fi
+
+            echo "[deploy] nuke previous code to avoid stale files"
+            rm -rf "$CURRENT"
+            mkdir -p "$CURRENT"
+
+            echo "[deploy] unzip new release"
+            unzip -o "$APP_DIR/release.zip" -d "$CURRENT" >/dev/null
+
+            echo "[deploy] ensure .env in place"
+            if [ -f "$APP_DIR/.env" ]; then
+              mv "$APP_DIR/.env" "$CURRENT/.env"
+            fi
+
+            echo "[deploy] ensure google SA path (if packed by CI)"
+            mkdir -p "$CURRENT/storage/app/google"
+
+            echo "[deploy] composer optimize & migrate"
+            cd "$CURRENT"
             composer install --no-dev --optimize-autoloader
             php artisan migrate --force
-            sudo supervisorctl reread
-            sudo supervisorctl update
-            sudo supervisorctl restart all
+            php artisan config:cache || true
+            php artisan route:cache || true
+            php artisan view:cache || true
+
+            # supervisor (if installed and running)
+            if command -v supervisorctl >/dev/null 2>&1; then
+              # 소켓 경로 강제 지정 (우리 conf 기준)
+              export SUPERVISOR_SERVER_URL=unix:///var/run/supervisor.sock
+
+              # 서비스가 죽어있으면 기동
+              if ! systemctl is-active --quiet supervisord; then
+                sudo systemctl start supervisord || true
+              fi
+
+              # 소켓 생길 때까지 최대 10초 대기
+              for i in {1..10}; do
+                [ -S /var/run/supervisor.sock ] && break
+                sleep 1
+              done
+
+              if [ -S /var/run/supervisor.sock ]; then
+                sudo supervisorctl reread || true
+                sudo supervisorctl update || true
+                sudo supervisorctl restart all || true
+              else
+                echo "[warn] supervisor.sock not found; skip supervisorctl steps"
+              fi
+            else
+              echo "[info] supervisorctl not found; skip"
+            fi
+
+            echo "[deploy] done"
 
       # SG 인바운드 규칙 제거
       - name: Revoke SSH from Security Group
