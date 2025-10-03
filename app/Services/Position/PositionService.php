@@ -146,4 +146,26 @@ class PositionService implements PositionServiceInterface
 
         return (float)number_format($sellRev - $buyCost, 8, '.', '');
     }
+
+    public function markDust(Position $position, array $meta = []): Position
+    {
+        $cur = $position->meta ?? [];
+        $new = array_replace($cur, [
+            'dust' => true,
+            'dust_marked_at' => now()->toIso8601String(),
+            'dust_meta' => $meta,
+        ]);
+
+        $position->meta = $new;
+        $position->save();
+
+        logger()->info('[PositionService] markDust', [
+            'id' => $position->id ?? null,
+            'symbol' => $position->symbol,
+            'qty' => $position->qty,
+            'meta' => $meta,
+        ]);
+
+        return $position->refresh();
+    }
 }

@@ -38,7 +38,7 @@ class BotBuildWatchListCommand extends Command
             'merge'  => $merge,
         ]);
 
-        $updated = $watch->syncExchangeMeta(); // 틱/스텝/최소금액 등
+        $updated = $watch->syncExchangeMeta($watch->enabledSymbols()); // 틱/스텝/최소금액 등
         $watch->clearCache();
 
         $this->info("watchlist rebuilt: enabled={$count}, metaUpdated={$updated}");

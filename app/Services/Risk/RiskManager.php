@@ -3,18 +3,25 @@
 namespace App\Services\Risk;
 
 use App\Models\DailyLedger;
+use App\Models\Position;
+use App\Services\Watch\WatchListRepository;
+use App\Services\Watch\WatchListRepositoryInterface;
 use Illuminate\Support\Facades\Cache;
 use App\DTO\Risk\RiskDecision;
 
 class RiskManager implements RiskManagerInterface
 {
+    private WatchListRepositoryInterface $watchListRepo;
     private string $tz;
 
     public function __construct(
+        WatchListRepositoryInterface $watchListRepo,
         string $tz = 'Asia/Seoul',
     )
     {
+        $this->watchListRepo = $watchListRepo;
         $this->tz = $tz;
+
     }
 
     /** 일일 예산 확인 / DD / 쿨다운 / 야간 금지 등을 종합 판단 (간단 버전) */
@@ -51,6 +58,25 @@ class RiskManager implements RiskManagerInterface
             );
         }
 
+
+        $ccy = str_starts_with($symbol, 'KRW-') ? 'KRW' : 'USDT';
+        $minQuote = config("exchange.upbit.min_quote_default.$ccy", 0);
+
+        // WatchList 메타의 심볼별 min_total이 있으면 우선 사용
+        $metaMin = $this->watchListRepo->getMetaMinQuote($symbol); // 없으면 null
+        if ($metaMin && $metaMin > 0) {
+            $minQuote = max($minQuote, $metaMin);
+        }
+
+        if ($orderUsdt < $minQuote) {
+            return new RiskDecision(
+                allowed: false,
+                reasonCode: 'under_min',
+                cooldownSec: null,
+                remainingBudgetUsdt: $remain,
+            );
+        }
+
         // 야간 여부는 여기서 차단하지 않음.
         // DRY/REAL 분기는 OrderExecutor(DryFireGuard)에서 자동 처리.
 
@@ -59,6 +85,36 @@ class RiskManager implements RiskManagerInterface
             reasonCode: null,
             cooldownSec: null,
             remainingBudgetUsdt: $remain,
+        );
+    }
+
+    /**
+     * 포지션 청산 가능한지 확인
+     */
+    public function canExit(Position $position, float $currentPrice): RiskDecision
+    {
+        $symbol = $position->symbol;
+
+        // 심볼별 최소 주문금액 가져오기 (없으면 config 기본값 사용)
+        $minQuote = $this->watchListRepo->getMetaMinQuote($symbol)
+            ?? config('exchange.upbit.min_quote_default.KRW', 5000);
+
+        $totalValue = $position->qty * $currentPrice;
+
+        if ($totalValue < $minQuote) {
+            return new RiskDecision(
+                false,
+                'UNDER_MIN_SELL',
+                null,
+                null
+            );
+        }
+
+        return new RiskDecision(
+            true,
+            null,
+            null,
+            null
         );
     }
 

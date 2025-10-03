@@ -54,7 +54,7 @@ interface WatchListServiceInterface
      * - 예: Upbit 마켓 메타를 가져와 워치리스트 컬럼 업데이트
      * @return int 갱신 개수
      */
-    public function syncExchangeMeta(array $symbols = []): int;
+    public function syncExchangeMeta(string $symbol): int;
 
     /** 캐시 무효화 */
     public function clearCache(): void;

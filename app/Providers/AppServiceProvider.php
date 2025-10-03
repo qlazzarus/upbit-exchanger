@@ -21,11 +21,12 @@ use App\Services\Reporting\MailNotifierInterface;
 use App\Services\Reporting\SheetAppenderInterface;
 use App\Services\Risk\RiskManager;
 use App\Services\Risk\RiskManagerInterface;
-use App\Services\SettingsService;
 use App\Services\Signals\SignalService;
 use App\Services\Signals\SignalServiceInterface;
 use App\Services\Watch\PositionWatcher;
 use App\Services\Watch\PositionWatcherInterface;
+use App\Services\Watch\WatchListRepository;
+use App\Services\Watch\WatchListRepositoryInterface;
 use App\Services\Watch\WatchListService;
 use App\Services\Watch\WatchListServiceInterface;
 use Google\Client;
@@ -57,6 +58,7 @@ class AppServiceProvider extends ServiceProvider
 
         $this->app->bind(MarketDataServiceInterface::class, MarketDataService::class);
         $this->app->bind(WatchListServiceInterface::class, WatchListService::class);
+        $this->app->bind(WatchListRepositoryInterface::class, WatchListRepository::class);
         $this->app->bind(SignalServiceInterface::class, SignalService::class);
         $this->app->bind(OrderExecutorInterface::class, OrderExecutor::class);
         $this->app->bind(PositionServiceInterface::class, PositionService::class);

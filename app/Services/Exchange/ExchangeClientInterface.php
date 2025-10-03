@@ -18,4 +18,5 @@ interface ExchangeClientInterface
 
     public function createMarketSell(string $symbol, float $qty): array;
 
+    public function getOrdersChance(string $symbol): array;
 }

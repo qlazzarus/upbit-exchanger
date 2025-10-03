@@ -3,20 +3,28 @@
 namespace App\Services\Watch;
 
 use App\Models\WatchList;
+use App\Services\Exchange\UpbitClient;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 
 class WatchListService implements WatchListServiceInterface
 {
+    private UpbitClient $upbit;
+    private WatchListRepositoryInterface $watchListRepo;
     private string $tz;
     private int $ttlSec = 5;
 
     public function __construct(
+        UpbitClient $upbit,
+        WatchListRepositoryInterface $watchListRepo,
         string $tz = 'Asia/Seoul',
         int $ttlSec = 5,
     ) {
+        $this->upbit = $upbit;
+        $this->watchListRepo = $watchListRepo;
         $this->tz = $tz;
         $this->ttlSec = $ttlSec;
     }
@@ -164,16 +172,75 @@ class WatchListService implements WatchListServiceInterface
         return count($this->enabledSymbols());
     }
 
-    public function syncExchangeMeta(array $symbols = []): int
+    public function syncExchangeMeta(array|string|null $symbols = null): int
     {
-        // 업비트 공개 API에서는 최소주문금액/호가단위 정보를 직접 제공하지 않습니다.
-        // (사설 API orders/chance를 심볼별 호출하면 가능하나 레이트리밋 이슈가 큽니다.)
-        // 현재는 안전한 no-op으로 두고, 추후 UpbitClient에 메타 조회가 추가되면 반영합니다.
-        if (!empty($symbols)) {
-            $symbols = array_values(array_unique(array_map('strval', $symbols)));
+        try {
+            // Normalize input → array of symbols
+            if (is_null($symbols)) {
+                $symbols = $this->enabledSymbols();
+            } elseif (is_string($symbols)) {
+                $symbols = [$symbols];
+            } elseif (is_array($symbols)) {
+                $symbols = array_values(array_unique(array_map('strval', $symbols)));
+            } else {
+                $symbols = [];
+            }
+
+            $updated = 0;
+            foreach ($symbols as $symbol) {
+                try {
+                    $chance = $this->upbit->getOrdersChance($symbol);
+
+                    if (!isset($chance['market'])) {
+                        Log::warning('[WatchListService] syncExchangeMeta failed', [
+                            'symbol' => $symbol,
+                            'resp'   => $chance,
+                        ]);
+                        continue;
+                    }
+
+                    // Upbit orders/chance: market[bid|min_total], market[ask|min_total], bid_fee, ask_fee
+                    $minTotalBid = $chance['market']['bid']['min_total'] ?? null; // 매수 최소 총액
+                    $minTotalAsk = $chance['market']['ask']['min_total'] ?? null; // 매도 최소 총액
+                    $bidFee      = $chance['bid_fee'] ?? ($chance['market']['bid_fee'] ?? null);
+                    $askFee      = $chance['ask_fee'] ?? ($chance['market']['ask_fee'] ?? null);
+
+                    $meta = [
+                        'min_total_quote' => $minTotalBid ?? $minTotalAsk, // 우선순위: 매수 최소, 없으면 매도 최소
+                        'min_total_bid'   => $minTotalBid,
+                        'min_total_ask'   => $minTotalAsk,
+                        'bid_fee'         => is_null($bidFee) ? null : (float)$bidFee,
+                        'ask_fee'         => is_null($askFee) ? null : (float)$askFee,
+                        'synced_at'       => now()->toDateTimeString(),
+                    ];
+
+                    $this->watchListRepo->mergeMeta($symbol, $meta);
+
+                    Log::info('[WatchListService] syncExchangeMeta updated', [
+                        'symbol'     => $symbol,
+                        'min_bid'    => $meta['min_total_bid'],
+                        'min_ask'    => $meta['min_total_ask'],
+                        'min_quote'  => $meta['min_total_quote'],
+                        'bid_fee'    => $meta['bid_fee'],
+                        'ask_fee'    => $meta['ask_fee'],
+                    ]);
+
+                    $updated++;
+                } catch (Throwable $e) {
+                    Log::error('[WatchListService] syncExchangeMeta error(symbol)', [
+                        'symbol' => $symbol,
+                        'error'  => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            return $updated;
+        } catch (Throwable $e) {
+            Log::error('[WatchListService] syncExchangeMeta error', [
+                'error' => $e->getMessage(),
+            ]);
+            return 0;
         }
-        logger()->info('[WatchListService] syncExchangeMeta skipped (no-op). Consider implementing via orders/chance per symbol with rate limiting.');
-        return 0;
     }
 
     public function clearCache(): void

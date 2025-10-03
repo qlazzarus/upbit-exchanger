@@ -25,6 +25,13 @@ interface PositionServiceInterface
     /** 포지션 청산(시장가 매도 완료 후 호출) + 매도 체결 로그 기록 */
     public function close(Position $position, float $exitPrice, array $meta = []): Position;
 
+    /**
+    * 더스트 포지션 표시(최소 청산금액 미만 등으로 보류 상태로 전환)
+    * - status 컬럼이 있다면 'dust' 등으로 변경하는 대신, 스키마 의존성을 줄이기 위해 메타에 플래그만 기록
+    * - 이후 재진입 누적으로 청산 가능해지면 일반 close() 경로로 처리
+    */
+    public function markDust(Position $position, array $meta = []): Position;
+
     /** 스탑/목표가 갱신 */
     public function updateStops(Position $position, ?float $tp = null, ?float $sl = null): Position;
 

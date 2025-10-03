@@ -91,7 +91,9 @@ class BotMinuteScanCommand extends Command
             }
 
             // --- 3-1) 리스크/예산 확인 ---
-            $decision = $this->risk->canEnter($symbol, $orderUsdt);
+            $quote = $this->portfolio->ensureMinQuote($symbol, $orderUsdt);
+
+            $decision = $this->risk->canEnter($symbol, $quote);
             if (!$decision->allowed) {
                 $this->line(sprintf(
                     'skip %s: risk=%s remain=%.4f%s',
@@ -106,11 +108,11 @@ class BotMinuteScanCommand extends Command
                 continue;
             }
 
-            if (!$this->portfolio->canAfford($orderUsdt)) {
+            if (!$this->portfolio->canAfford($quote)) {
                 $this->line(sprintf(
                     'skip %s: cannot afford %.4f (free=%.4f, remainDaily=%.4f)',
                     $symbol,
-                    $orderUsdt,
+                    $quote,
                     $this->portfolio->freeUsdt(),
                     $this->portfolio->remainingDailyBudgetUsdt()
                 ));
@@ -132,7 +134,7 @@ class BotMinuteScanCommand extends Command
 
             // --- 3-3) 시장가 매수(견적통화 금액 기준) ---
             try {
-                $res = $this->exec->marketBuyByQuote($symbol, $orderUsdt);
+                $res = $this->exec->marketBuyByQuote($symbol, $quote);
             } catch (Throwable $e) {
                 $this->error("buy fail {$symbol}: {$e->getMessage()}");
                 if (method_exists($this->signalService, 'markSkipped')) {
@@ -144,7 +146,7 @@ class BotMinuteScanCommand extends Command
             // ExecutionResult -> Position 오픈
             $mode = $res->mode ?? TradeModeEnum::DRY;
             $avg = $res->avgPrice ?? $price;
-            $qty = $res->filledQty ?? ($avg > 0 ? round($orderUsdt / $avg, 6) : null);
+            $qty = $res->filledQty ?? ($avg > 0 ? round($quote / $avg, 6) : null);
 
             if (!$qty || $qty <= 0) {
                 $this->warn("skip {$symbol}: qty unresolved");
@@ -183,7 +185,7 @@ class BotMinuteScanCommand extends Command
                 number_format($qty, 6, '.', ''),
                 number_format($avg, 8, '.', ''),
                 $mode->value,
-                $orderUsdt,
+                $quote,
                 (float)($res->fee ?? 0.0)
             ));
         }

@@ -191,6 +191,32 @@ class UpbitClient implements ExchangeClientInterface
     }
 
     /**
+     * Fetch symbol-specific order chance (min total, fees, etc).
+     * Upbit: GET /v1/orders/chance?market=KRW-BTC (signed)
+     * @param string $symbol e.g. "KRW-BTC" or "BTC/USDT"
+     * @return array
+     * @throws ConnectionException
+     */
+    public function getOrdersChance(string $symbol): array
+    {
+        $market = $this->normalizeSymbol($symbol);
+
+        $resp = $this->signedGet('/v1/orders/chance', ['market' => $market]);
+
+        if (!$resp->successful()) {
+            Log::warning('[UpbitClient] getOrdersChance failed', [
+                'market' => $market,
+                'status' => $resp->status(),
+                'body'   => $resp->body(),
+            ]);
+            return [];
+        }
+
+        $data = $resp->json();
+        return is_array($data) ? $data : [];
+    }
+
+    /**
      * Cancel an order by UUID.
      * Upbit: DELETE /v1/order?uuid=...
      */

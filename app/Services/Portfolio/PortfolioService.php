@@ -4,6 +4,7 @@ namespace App\Services\Portfolio;
 
 use App\Services\Exchange\UpbitClient;
 use App\Services\Risk\RiskManagerInterface;
+use App\Services\Watch\WatchListRepositoryInterface;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -12,6 +13,7 @@ class PortfolioService implements PortfolioServiceInterface
 {
     private UpbitClient $upbit;
     private RiskManagerInterface $risk;
+    private WatchListRepositoryInterface $watchListRepo;
     private string $asset = 'USDT';
     private int $balanceTtlSec = 3;
     private string $tz = 'Asia/Seoul';
@@ -19,6 +21,7 @@ class PortfolioService implements PortfolioServiceInterface
     public function __construct(
         UpbitClient          $upbit,
         RiskManagerInterface $risk,
+        WatchListRepositoryInterface $watchListRepo,
         string               $asset = 'USDT',              // 기본 자산
         string               $tz = 'Asia/Seoul',
         int                  $balanceTtlSec = 3               // 잔고 단기 캐시 (초)
@@ -29,6 +32,7 @@ class PortfolioService implements PortfolioServiceInterface
         $this->asset = $asset;
         $this->risk = $risk;
         $this->upbit = $upbit;
+        $this->watchListRepo = $watchListRepo;
     }
 
     public function freeUsdt(): float
@@ -68,5 +72,19 @@ class PortfolioService implements PortfolioServiceInterface
 
         // 실보유잔고 & 일일예산 잔여액 모두 충족해야 신규 진입 가능
         return $usdt <= $free + 1e-9 && $usdt <= $remain + 1e-9;
+    }
+
+    public function ensureMinQuote(string $symbol, float $desired): float
+    {
+        $ccy = str_starts_with($symbol, 'KRW-') ? 'KRW' : 'USDT';
+        $min = config("exchange.upbit.min_quote_default.$ccy", 0);
+
+        $metaMin = $this->watchListRepo->getMetaMinQuote($symbol);
+        if ($metaMin && $metaMin > 0) {
+            $min = max($min, $metaMin);
+        }
+
+        // 잔고가 모자라면 어차피 못 사니 그대로 리턴 (RiskManager에서 컷)
+        return max($desired, $min);
     }
 }

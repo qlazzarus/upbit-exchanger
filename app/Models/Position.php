@@ -28,6 +28,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $notes
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property array<array-key, mixed>|null $meta
  * @property-read string|null $realized_pnl
  * @property-read Collection<int, Trade> $trades
  * @property-read int|null $trades_count
@@ -41,6 +42,7 @@ use Illuminate\Support\Carbon;
  * @method static Builder<static>|Position whereEntryPrice($value)
  * @method static Builder<static>|Position whereId($value)
  * @method static Builder<static>|Position whereMae($value)
+ * @method static Builder<static>|Position whereMeta($value)
  * @method static Builder<static>|Position whereMfe($value)
  * @method static Builder<static>|Position whereMode($value)
  * @method static Builder<static>|Position whereNotes($value)
@@ -58,7 +60,7 @@ class Position extends Model
     //
     protected $fillable = [
         'symbol', 'mode', 'qty', 'entry_price', 'tp_price', 'sl_price',
-        'status', 'opened_at', 'closed_at', 'mfe', 'mae', 'notes'
+        'status', 'opened_at', 'closed_at', 'mfe', 'mae', 'notes', 'meta'
     ];
 
 
@@ -72,7 +74,8 @@ class Position extends Model
         'opened_at' => 'datetime',
         'closed_at' => 'datetime',
         'mfe' => 'decimal:8',
-        'mae' => 'decimal:8'
+        'mae' => 'decimal:8',
+        'meta' => 'array',
     ];
 
     public function trades(): HasMany
