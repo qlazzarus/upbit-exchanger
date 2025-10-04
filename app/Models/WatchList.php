@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property bool $enabled
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property string|null $meta
  * @property-read Collection<int, Position> $positions
  * @property-read int|null $positions_count
  * @property-read Collection<int, Signal> $signals
@@ -36,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @method static Builder<static>|WatchList whereEnabled($value)
  * @method static Builder<static>|WatchList whereId($value)
  * @method static Builder<static>|WatchList whereMaxEntryUsdt($value)
+ * @method static Builder<static>|WatchList whereMeta($value)
  * @method static Builder<static>|WatchList wherePriority($value)
  * @method static Builder<static>|WatchList whereQuote($value)
  * @method static Builder<static>|WatchList whereStepSize($value)
