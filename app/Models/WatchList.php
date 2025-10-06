@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  * @property bool $enabled
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
- * @property string|null $meta
+ * @property array|null $meta
  * @property-read Collection<int, Position> $positions
  * @property-read int|null $positions_count
  * @property-read Collection<int, Signal> $signals
@@ -59,6 +59,12 @@ class WatchList extends Model
         'tick_size' => 'decimal:8',
         'step_size' => 'decimal:8',
         'enabled' => 'boolean',
+        'meta' => 'array', // JSON 컬럼
+    ];
+
+    // null로 들어온 경우 array로 동작하도록 기본값
+    protected $attributes = [
+        'meta' => '[]',
     ];
 
     // symbol 기반 연관 (FK는 아니지만 편의상 로컬키=심볼로 연결)
